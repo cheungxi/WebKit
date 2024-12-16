@@ -6629,7 +6629,7 @@ void SpeculativeJIT::compileArithMod(Node* node)
             unlock(op2TempGPR);
 
         strictInt52Result(X86Registers::edx, node);
-#elif CPU(ARM64)
+#elif CPU(ARM64) || CPU(LOONGARCH64)
         GPRTemporary quotient(this);
         GPRTemporary result(this);
 

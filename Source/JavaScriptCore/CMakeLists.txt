@@ -254,6 +254,7 @@ set(OFFLINE_ASM
     offlineasm/parser.rb
     offlineasm/registers.rb
     offlineasm/risc.rb
+    offlineasm/loongarch64.rb
     offlineasm/riscv64.rb
     offlineasm/self_hash.rb
     offlineasm/settings.rb
@@ -306,6 +307,8 @@ elseif (ARM_THUMB2_DETECTED)
     set(OFFLINE_ASM_BACKEND "ARMv7")
 elseif (WTF_CPU_RISCV64)
     set(OFFLINE_ASM_BACKEND "RISCV64")
+elseif (WTF_CPU_LOONGARCH64)
+    set(OFFLINE_ASM_BACKEND "LOONGARCH64")
 endif ()
 
 if (NOT ENABLE_JIT)
@@ -629,6 +632,7 @@ set(JavaScriptCore_PRIVATE_FRAMEWORK_HEADERS
     assembler/MacroAssemblerARMv7.h
     assembler/MacroAssemblerCodeRef.h
     assembler/MacroAssemblerHelpers.h
+    assembler/MacroAssemblerLOONGARCH64.h
     assembler/MacroAssemblerX86_64.h
     assembler/MaxFrameExtentForSlowPathCall.h
     assembler/OSCheck.h
@@ -636,6 +640,8 @@ set(JavaScriptCore_PRIVATE_FRAMEWORK_HEADERS
     assembler/ProbeContext.h
     assembler/ProbeStack.h
     assembler/RegisterInfo.h
+    assembler/LOONGARCH64Assembler.h
+    assembler/LOONGARCH64Registers.h
     assembler/SecureARM64EHashPins.h
     assembler/SecureARM64EHashPinsInlines.h
     assembler/TargetAssemblerDefinitions.h

@@ -2912,7 +2912,7 @@ void LOLJIT::emit_op_mod(const JSInstruction* currentInstruction)
     m_fastAllocator.releaseScratches(allocations);
 }
 
-#elif CPU(ARM64)
+#elif CPU(ARM64) || CPU(LOONGARCH64)
 
 void LOLJIT::emit_op_mod(const JSInstruction* currentInstruction)
 {
@@ -3955,4 +3955,3 @@ MacroAssemblerCodeRef<JITThunkPtrTag> LOLJIT::slow_op_resolve_scopeGenerator(VM&
 WTF_ALLOW_UNSAFE_BUFFER_USAGE_END
 
 #endif // ENABLE(JIT) && USE(JSVALUE64)
-
