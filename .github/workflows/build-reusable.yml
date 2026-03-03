@@ -259,8 +259,42 @@ jobs:
             python3 \
             perl \
             pkg-config \
-            gperf \
-            libicu-dev
+            gperf
+      - name: Cross-compile ICU for loongarch64
+        if: ${{ matrix.cross_compile == 'loongarch64' }}
+        run: |
+          set -euo pipefail
+          ICU_BUILD_DIR="$(pwd)"
+
+          # Download ICU source (same version used in Dockerfile)
+          wget -q --tries=3 https://github.com/unicode-org/icu/releases/download/release-75-1/icu4c-75_1-src.tgz
+          tar -xf icu4c-75_1-src.tgz
+
+          # Build host ICU tools first (required for cross-compilation)
+          mkdir -p icu-host-build && cd icu-host-build
+          "${ICU_BUILD_DIR}/icu/source/configure" \
+            --disable-samples --disable-tests --disable-extras --disable-icuio
+          make -j$(nproc)
+          cd "${ICU_BUILD_DIR}"
+
+          # Cross-compile ICU for loongarch64 and install to sysroot
+          mkdir -p icu-cross-build && cd icu-cross-build
+          "${ICU_BUILD_DIR}/icu/source/configure" \
+            --host=loongarch64-linux-gnu \
+            --prefix=/usr/loongarch64-linux-gnu \
+            --with-cross-build="${ICU_BUILD_DIR}/icu-host-build" \
+            --enable-static \
+            --disable-shared \
+            --disable-samples \
+            --disable-tests \
+            --disable-extras \
+            --disable-icuio \
+            --disable-layoutex \
+            --with-data-packaging=static \
+            CC=loongarch64-linux-gnu-gcc-14 \
+            CXX=loongarch64-linux-gnu-g++-14
+          make -j$(nproc)
+          sudo make install
       - name: Cross-compile build
         if: ${{ matrix.cross_compile == 'loongarch64' }}
         run: |
