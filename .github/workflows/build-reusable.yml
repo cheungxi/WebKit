@@ -251,8 +251,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            gcc-loongarch64-linux-gnu \
-            g++-loongarch64-linux-gnu \
+            gcc-14-loongarch64-linux-gnu \
+            g++-14-loongarch64-linux-gnu \
             cmake \
             ninja-build \
             ruby \
@@ -268,8 +268,8 @@ jobs:
           cmake -G Ninja \
             -DCMAKE_SYSTEM_NAME=Linux \
             -DCMAKE_SYSTEM_PROCESSOR=loongarch64 \
-            -DCMAKE_C_COMPILER=loongarch64-linux-gnu-gcc \
-            -DCMAKE_CXX_COMPILER=loongarch64-linux-gnu-g++ \
+            -DCMAKE_C_COMPILER=loongarch64-linux-gnu-gcc-14 \
+            -DCMAKE_CXX_COMPILER=loongarch64-linux-gnu-g++-14 \
             -DCMAKE_FIND_ROOT_PATH=/usr/loongarch64-linux-gnu \
             -DCMAKE_FIND_ROOT_PATH_MODE_PROGRAM=NEVER \
             -DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY \
