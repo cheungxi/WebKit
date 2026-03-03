@@ -33,6 +33,12 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
+            // Skip permission check for bot actors (e.g. Copilot)
+            if (context.actor.endsWith('[bot]') || context.actor === 'Copilot') {
+              core.info(`Skipping permission check for bot actor: ${context.actor}`);
+              return;
+            }
+
             const { data: permission } = await github.rest.repos.getCollaboratorPermissionLevel({
               owner: context.repo.owner,
               repo: context.repo.repo,
