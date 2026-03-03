@@ -431,7 +431,15 @@ jobs:
         run: |
           rm -rf ${{runner.temp}}/bun-webkit ${{runner.temp}}/bun-webkit.tar.gz
           cmake -G Ninja \
-            -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/cmake/toolchains/loongarch64-linux-gnu.cmake \
+            -DCMAKE_SYSTEM_NAME=Linux \
+            -DCMAKE_SYSTEM_PROCESSOR=loongarch64 \
+            -DCMAKE_C_COMPILER=loongarch64-linux-gnu-gcc \
+            -DCMAKE_CXX_COMPILER=loongarch64-linux-gnu-g++ \
+            -DCMAKE_FIND_ROOT_PATH=/usr/loongarch64-linux-gnu \
+            -DCMAKE_FIND_ROOT_PATH_MODE_PROGRAM=NEVER \
+            -DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY \
+            -DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=ONLY \
+            -DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=ONLY \
             -DPORT=JSCOnly \
             -DCMAKE_BUILD_TYPE=${{matrix.CMAKE_BUILD_TYPE}} \
             -DENABLE_STATIC_JSC=ON \
