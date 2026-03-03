@@ -196,7 +196,17 @@ jobs:
             CMAKE_BUILD_TYPE: "Release"
             RELEASE_FLAGS: "-O3 -DNDEBUG=1"
             ENABLE_SANITIZERS: "address,undefined"
-    timeout-minutes: 90
+          - label: bun-webkit-linux-loongarch64
+            os: ubuntu-latest
+            package_json_arch: "loong64"
+            CMAKE_BUILD_TYPE: "Release"
+            cross_compile: "loongarch64"
+          - label: bun-webkit-linux-loongarch64-debug
+            os: ubuntu-latest
+            package_json_arch: "loong64"
+            CMAKE_BUILD_TYPE: "Debug"
+            cross_compile: "loongarch64"
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
         with:
@@ -207,10 +217,12 @@ jobs:
             !LayoutTests/
             !JSTests/
       - uses: docker/setup-buildx-action@v2
+        if: ${{ !matrix.cross_compile }}
         id: buildx
         with:
           install: true
       - name: Run
+        if: ${{ !matrix.cross_compile }}
         env:
           RELEASE_FLAGS: ${{matrix.RELEASE_FLAGS}}
           ENABLE_SANITIZERS: ${{matrix.ENABLE_SANITIZERS}}
@@ -227,6 +239,62 @@ jobs:
           echo '{ "name": "${{matrix.label}}", "version": "0.0.1-${{ inputs.build_ref }}", "os": ["linux"], "cpu": ["${{matrix.package_json_arch}}"], "repository": "https://github.com/${{github.repository}}" }' > bun-webkit/package.json
           rm -rf bun-webkit/lib/*.so
           rm -rf bun-webkit/lib/*.so.*
+          tar -czf bun-webkit.tar.gz bun-webkit
+          rm -rf bun-webkit
+      - name: Set up QEMU
+        if: ${{ matrix.cross_compile == 'loongarch64' }}
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: linux/loong64
+      - name: Install cross-compilation toolchain
+        if: ${{ matrix.cross_compile == 'loongarch64' }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            gcc-loongarch64-linux-gnu \
+            g++-loongarch64-linux-gnu \
+            cmake \
+            ninja-build \
+            ruby \
+            python3 \
+            perl \
+            pkg-config \
+            gperf \
+            libicu-dev
+      - name: Cross-compile build
+        if: ${{ matrix.cross_compile == 'loongarch64' }}
+        run: |
+          rm -rf ${{runner.temp}}/bun-webkit ${{runner.temp}}/bun-webkit.tar.gz
+          cmake -G Ninja \
+            -DCMAKE_SYSTEM_NAME=Linux \
+            -DCMAKE_SYSTEM_PROCESSOR=loongarch64 \
+            -DCMAKE_C_COMPILER=loongarch64-linux-gnu-gcc \
+            -DCMAKE_CXX_COMPILER=loongarch64-linux-gnu-g++ \
+            -DCMAKE_FIND_ROOT_PATH=/usr/loongarch64-linux-gnu \
+            -DCMAKE_FIND_ROOT_PATH_MODE_PROGRAM=NEVER \
+            -DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY \
+            -DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=ONLY \
+            -DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=ONLY \
+            -DPORT=JSCOnly \
+            -DCMAKE_BUILD_TYPE=${{matrix.CMAKE_BUILD_TYPE}} \
+            -DENABLE_STATIC_JSC=ON \
+            -DUSE_SYSTEM_MALLOC=ON \
+            -DENABLE_JIT=OFF \
+            -DENABLE_FTL_JIT=OFF \
+            -DENABLE_DFG_JIT=OFF \
+            -DUSE_BUN_JSC_ADDITIONS=ON \
+            -DUSE_BUN_EVENT_LOOP=ON \
+            -B build \
+            -S .
+          cmake --build build --target jsc -- -j$(nproc)
+          mkdir -p ${{runner.temp}}/bun-webkit
+          cp -r build/bin ${{runner.temp}}/bun-webkit/ || true
+          cp -r build/lib ${{runner.temp}}/bun-webkit/ || true
+          mkdir -p ${{runner.temp}}/bun-webkit/include
+          find build -name "*.h" -path "*/DerivedSources/*" -exec cp {} ${{runner.temp}}/bun-webkit/include/ \; || true
+          echo "#define BUN_WEBKIT_VERSION \"${{ inputs.build_ref }}\"" >> ${{runner.temp}}/bun-webkit/include/cmakeconfig.h || true
+          echo '{ "name": "${{matrix.label}}", "version": "0.0.1-${{ inputs.build_ref }}", "os": ["linux"], "cpu": ["${{matrix.package_json_arch}}"], "repository": "https://github.com/${{github.repository}}" }' > ${{runner.temp}}/bun-webkit/package.json
+          cd ${{runner.temp}}
           tar -czf bun-webkit.tar.gz bun-webkit
           rm -rf bun-webkit
       - uses: actions/upload-artifact@v4
@@ -389,84 +457,6 @@ jobs:
           name: ${{matrix.label}}
           path: ${{runner.temp}}/bun-webkit.tar.gz
 
-  linux-loongarch64:
-    name: Linux LoongArch64
-    runs-on: ubuntu-latest
-    timeout-minutes: 120
-    strategy:
-      matrix:
-        include:
-          - label: bun-webkit-linux-loongarch64
-            CMAKE_BUILD_TYPE: "Release"
-          - label: bun-webkit-linux-loongarch64-debug
-            CMAKE_BUILD_TYPE: "Debug"
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.build_ref }}
-          sparse-checkout-cone-mode: false
-          sparse-checkout: |
-            /*
-            !LayoutTests/
-            !JSTests/
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: linux/loong64
-      - name: Install cross-compilation toolchain
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            gcc-loongarch64-linux-gnu \
-            g++-loongarch64-linux-gnu \
-            cmake \
-            ninja-build \
-            ruby \
-            python3 \
-            perl \
-            pkg-config \
-            gperf \
-            libicu-dev
-      - name: Build
-        run: |
-          rm -rf ${{runner.temp}}/bun-webkit ${{runner.temp}}/bun-webkit.tar.gz
-          cmake -G Ninja \
-            -DCMAKE_SYSTEM_NAME=Linux \
-            -DCMAKE_SYSTEM_PROCESSOR=loongarch64 \
-            -DCMAKE_C_COMPILER=loongarch64-linux-gnu-gcc \
-            -DCMAKE_CXX_COMPILER=loongarch64-linux-gnu-g++ \
-            -DCMAKE_FIND_ROOT_PATH=/usr/loongarch64-linux-gnu \
-            -DCMAKE_FIND_ROOT_PATH_MODE_PROGRAM=NEVER \
-            -DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY \
-            -DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=ONLY \
-            -DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=ONLY \
-            -DPORT=JSCOnly \
-            -DCMAKE_BUILD_TYPE=${{matrix.CMAKE_BUILD_TYPE}} \
-            -DENABLE_STATIC_JSC=ON \
-            -DUSE_SYSTEM_MALLOC=ON \
-            -DENABLE_JIT=OFF \
-            -DENABLE_FTL_JIT=OFF \
-            -DENABLE_DFG_JIT=OFF \
-            -DUSE_BUN_JSC_ADDITIONS=ON \
-            -DUSE_BUN_EVENT_LOOP=ON \
-            -B build \
-            -S .
-          cmake --build build --target jsc -- -j$(nproc)
-          mkdir -p ${{runner.temp}}/bun-webkit
-          cp -r build/bin ${{runner.temp}}/bun-webkit/ || true
-          cp -r build/lib ${{runner.temp}}/bun-webkit/ || true
-          mkdir -p ${{runner.temp}}/bun-webkit/include
-          find build -name "*.h" -path "*/DerivedSources/*" -exec cp {} ${{runner.temp}}/bun-webkit/include/ \; || true
-          echo "#define BUN_WEBKIT_VERSION \"${{ inputs.build_ref }}\"" >> ${{runner.temp}}/bun-webkit/include/cmakeconfig.h || true
-          echo '{ "name": "${{matrix.label}}", "version": "0.0.1-${{ inputs.build_ref }}", "os": ["linux"], "cpu": ["loong64"], "repository": "https://github.com/${{github.repository}}" }' > ${{runner.temp}}/bun-webkit/package.json
-          cd ${{runner.temp}}
-          tar -czf bun-webkit.tar.gz bun-webkit
-          rm -rf bun-webkit
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ${{matrix.label}}
-          path: ${{runner.temp}}/bun-webkit.tar.gz
-
   release:
     name: release
     permissions:
@@ -478,7 +468,6 @@ jobs:
       - macos
       - windows
       - linux-musl
-      - linux-loongarch64
     outputs:
       tag: ${{ steps.release_info.outputs.tag }}
     steps:
