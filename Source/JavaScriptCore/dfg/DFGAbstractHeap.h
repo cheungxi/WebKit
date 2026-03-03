@@ -25,24 +25,9 @@
 
 #pragma once
 
-#if ENABLE(DFG_JIT)
-
-#include "DOMJITHeapRange.h"
-#include "OperandsInlines.h"
-#include "VirtualRegister.h"
-#include <wtf/HashMap.h>
-#include <wtf/PrintStream.h>
+#include <cstdint>
 
 namespace JSC { namespace DFG {
-
-// Implements a four-level type hierarchy:
-// - World is the supertype of all of the things.
-// - Stack with a TOP payload is a direct subtype of World
-// - Stack with a non-TOP payload is a direct subtype of Stack with a TOP payload.
-// - Heap is a direct subtype of World.
-// - SideState is a direct subtype of World.
-// - Any other kind with TOP payload is the direct subtype of Heap.
-// - Any other kind with non-TOP payload is the direct subtype of the same kind with a TOP payload.
 
 #define FOR_EACH_ABSTRACT_HEAP_KIND(macro) \
     macro(InvalidAbstractHeap) \
@@ -98,6 +83,27 @@ enum AbstractHeapKind : uint8_t {
     FOR_EACH_ABSTRACT_HEAP_KIND(ABSTRACT_HEAP_DECLARATION)
 #undef ABSTRACT_HEAP_DECLARATION
 };
+
+} } // namespace JSC::DFG
+
+#if ENABLE(DFG_JIT)
+
+#include "DOMJITHeapRange.h"
+#include "OperandsInlines.h"
+#include "VirtualRegister.h"
+#include <wtf/HashMap.h>
+#include <wtf/PrintStream.h>
+
+namespace JSC { namespace DFG {
+
+// Implements a four-level type hierarchy:
+// - World is the supertype of all of the things.
+// - Stack with a TOP payload is a direct subtype of World
+// - Stack with a non-TOP payload is a direct subtype of Stack with a TOP payload.
+// - Heap is a direct subtype of World.
+// - SideState is a direct subtype of World.
+// - Any other kind with TOP payload is the direct subtype of Heap.
+// - Any other kind with non-TOP payload is the direct subtype of the same kind with a TOP payload.
 
 class AbstractHeap {
 public:
