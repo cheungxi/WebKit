@@ -1,0 +1,130 @@
+name: Build LoongArch64
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version/tag (e.g. v1.0.0). Defaults to the current commit SHA."
+        required: false
+        default: ""
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    name: Cross-compile for LoongArch64
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: linux/loong64
+
+      - name: Install cross-compilation toolchain and dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            gcc-loongarch64-linux-gnu \
+            g++-loongarch64-linux-gnu \
+            cmake \
+            ninja-build \
+            ruby \
+            python3 \
+            perl \
+            pkg-config \
+            gperf \
+            libicu-dev
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            echo "tag=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
+          elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=autobuild-${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Configure with CMake
+        run: |
+          cmake -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="${{ github.workspace }}/cmake/toolchains/loongarch64-linux-gnu.cmake" \
+            -DPORT=JSCOnly \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DENABLE_STATIC_JSC=ON \
+            -DUSE_SYSTEM_MALLOC=ON \
+            -DENABLE_JIT=OFF \
+            -DENABLE_FTL_JIT=OFF \
+            -DENABLE_DFG_JIT=OFF \
+            -DUSE_BUN_JSC_ADDITIONS=ON \
+            -DUSE_BUN_EVENT_LOOP=ON \
+            -B build \
+            -S .
+
+      - name: Build
+        run: cmake --build build --target jsc -- -j$(nproc)
+
+      - name: Package build output
+        run: |
+          VERSION="${{ steps.version.outputs.tag }}"
+          ARCHIVE="webkit-loongarch64-linux-${VERSION}.tar.gz"
+          tar -czf "${ARCHIVE}" \
+            -C build \
+            --wildcards \
+            bin/jsc \
+            lib/libJavaScriptCore* \
+            lib/libWTF* \
+            lib/libbmalloc* 2>/dev/null || \
+          tar -czf "${ARCHIVE}" -C build bin lib
+          sha256sum "${ARCHIVE}" > "${ARCHIVE}.sha256"
+          echo "ARCHIVE=${ARCHIVE}" >> "$GITHUB_ENV"
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: webkit-loongarch64-linux-${{ steps.version.outputs.tag }}
+          path: |
+            webkit-loongarch64-linux-*.tar.gz
+            webkit-loongarch64-linux-*.tar.gz.sha256
+
+  release:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Determine version
+        id: version
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            echo "tag=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
+          elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=autobuild-${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4.1.3
+        with:
+          name: webkit-loongarch64-linux-${{ steps.version.outputs.tag }}
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: "WebKit LoongArch64 ${{ steps.version.outputs.tag }}"
+          generate_release_notes: true
+          files: |
+            webkit-loongarch64-linux-*.tar.gz
+            webkit-loongarch64-linux-*.tar.gz.sha256
