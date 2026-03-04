@@ -267,6 +267,9 @@ jobs:
           chmod +x llvm.sh
           sudo ./llvm.sh ${{ env.LLVM_VERSION }} all
           rm llvm.sh
+          # Ubuntu installs cross-GCC to /usr/lib/gcc-cross/ but clang's --gcc-toolchain
+          # looks under /usr/lib/gcc/. Create a symlink so clang finds the CRT files.
+          sudo ln -s /usr/lib/gcc-cross/loongarch64-linux-gnu /usr/lib/gcc/loongarch64-linux-gnu
       - name: Cross-compile ICU for loongarch64
         if: ${{ matrix.cross_compile == 'loongarch64' }}
         run: |
@@ -305,7 +308,7 @@ jobs:
             RANLIB="llvm-ranlib-${LLVM}" \
             CFLAGS="--target=loongarch64-linux-gnu --sysroot=/usr/loongarch64-linux-gnu --gcc-toolchain=/usr" \
             CXXFLAGS="--target=loongarch64-linux-gnu --sysroot=/usr/loongarch64-linux-gnu --gcc-toolchain=/usr" \
-            LDFLAGS="--target=loongarch64-linux-gnu --sysroot=/usr/loongarch64-linux-gnu -fuse-ld=lld-${LLVM}"
+            LDFLAGS="--target=loongarch64-linux-gnu --sysroot=/usr/loongarch64-linux-gnu --gcc-toolchain=/usr -fuse-ld=lld-${LLVM}"
           make -j$(nproc)
           sudo make install
       - name: Cross-compile build
@@ -323,7 +326,9 @@ jobs:
             -DCMAKE_SYSROOT=/usr/loongarch64-linux-gnu \
             -DCMAKE_AR=$(which llvm-ar-${LLVM}) \
             -DCMAKE_RANLIB=$(which llvm-ranlib-${LLVM}) \
-            -DCMAKE_EXE_LINKER_FLAGS="-fuse-ld=lld" \
+            -DCMAKE_C_FLAGS="--gcc-toolchain=/usr" \
+            -DCMAKE_CXX_FLAGS="--gcc-toolchain=/usr" \
+            -DCMAKE_EXE_LINKER_FLAGS="-fuse-ld=lld --gcc-toolchain=/usr" \
             -DCMAKE_FIND_ROOT_PATH=/usr/loongarch64-linux-gnu \
             -DCMAKE_FIND_ROOT_PATH_MODE_PROGRAM=NEVER \
             -DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY \
