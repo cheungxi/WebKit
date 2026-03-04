@@ -209,6 +209,17 @@ endif ()
 
 find_package(ICU 70.1 REQUIRED COMPONENTS data i18n uc)
 
+# Declare ICU inter-library dependencies for correct static link order.
+# With static archives, GNU ld processes left-to-right and discards unreferenced
+# symbols, so ICU::uc (which references icudt*_dat) must come before ICU::data.
+# CMake's FindICU does not set these up, so we add them explicitly.
+if (TARGET ICU::uc AND TARGET ICU::data)
+    set_property(TARGET ICU::uc APPEND PROPERTY INTERFACE_LINK_LIBRARIES ICU::data)
+endif ()
+if (TARGET ICU::i18n AND TARGET ICU::uc)
+    set_property(TARGET ICU::i18n APPEND PROPERTY INTERFACE_LINK_LIBRARIES ICU::uc)
+endif ()
+
 if (APPLE)
     add_definitions(-DU_DISABLE_RENAMING=1)
 endif ()

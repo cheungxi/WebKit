@@ -196,7 +196,17 @@ jobs:
             CMAKE_BUILD_TYPE: "Release"
             RELEASE_FLAGS: "-O3 -DNDEBUG=1"
             ENABLE_SANITIZERS: "address,undefined"
-    timeout-minutes: 90
+          - label: bun-webkit-linux-loongarch64
+            os: ubuntu-latest
+            package_json_arch: "loong64"
+            CMAKE_BUILD_TYPE: "Release"
+            cross_compile: "loongarch64"
+          - label: bun-webkit-linux-loongarch64-debug
+            os: ubuntu-latest
+            package_json_arch: "loong64"
+            CMAKE_BUILD_TYPE: "Debug"
+            cross_compile: "loongarch64"
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
         with:
@@ -207,10 +217,12 @@ jobs:
             !LayoutTests/
             !JSTests/
       - uses: docker/setup-buildx-action@v2
+        if: ${{ !matrix.cross_compile }}
         id: buildx
         with:
           install: true
       - name: Run
+        if: ${{ !matrix.cross_compile }}
         env:
           RELEASE_FLAGS: ${{matrix.RELEASE_FLAGS}}
           ENABLE_SANITIZERS: ${{matrix.ENABLE_SANITIZERS}}
@@ -227,6 +239,121 @@ jobs:
           echo '{ "name": "${{matrix.label}}", "version": "0.0.1-${{ inputs.build_ref }}", "os": ["linux"], "cpu": ["${{matrix.package_json_arch}}"], "repository": "https://github.com/${{github.repository}}" }' > bun-webkit/package.json
           rm -rf bun-webkit/lib/*.so
           rm -rf bun-webkit/lib/*.so.*
+          tar -czf bun-webkit.tar.gz bun-webkit
+          rm -rf bun-webkit
+      - name: Set up QEMU
+        if: ${{ matrix.cross_compile == 'loongarch64' }}
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: linux/loong64
+      - name: Install cross-compilation toolchain
+        if: ${{ matrix.cross_compile == 'loongarch64' }}
+        run: |
+          sudo apt-get update
+          # GCC cross-toolchain provides the loongarch64 sysroot (libc, libstdc++ headers/libs)
+          # LLVM/Clang is used as the actual compiler + LLD as the linker
+          sudo apt-get install -y \
+            gcc-14-loongarch64-linux-gnu \
+            g++-14-loongarch64-linux-gnu \
+            cmake \
+            ninja-build \
+            ruby \
+            python3 \
+            perl \
+            pkg-config \
+            gperf
+          # Install LLVM ${{ env.LLVM_VERSION }}
+          wget -q https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh ${{ env.LLVM_VERSION }} all
+          rm llvm.sh
+          # Ubuntu installs cross-GCC to /usr/lib/gcc-cross/ but clang's --gcc-toolchain
+          # looks under /usr/lib/gcc/. Create a symlink so clang finds the CRT files.
+          sudo ln -s /usr/lib/gcc-cross/loongarch64-linux-gnu /usr/lib/gcc/loongarch64-linux-gnu
+      - name: Cross-compile ICU for loongarch64
+        if: ${{ matrix.cross_compile == 'loongarch64' }}
+        run: |
+          set -euo pipefail
+          ICU_BUILD_DIR="$(pwd)"
+          LLVM=${{ env.LLVM_VERSION }}
+
+          # Download ICU source (76.1 needed for loongarch64 support in config.guess/config.sub)
+          wget -q --tries=3 https://github.com/unicode-org/icu/releases/download/release-76-1/icu4c-76_1-src.tgz
+          tar -xf icu4c-76_1-src.tgz
+
+          # Build host ICU tools first (required for cross-compilation)
+          mkdir -p icu-host-build && cd icu-host-build
+          "${ICU_BUILD_DIR}/icu/source/configure" \
+            --disable-samples --disable-tests --disable-extras --disable-icuio
+          make -j$(nproc)
+          cd "${ICU_BUILD_DIR}"
+
+          # Cross-compile ICU for loongarch64 using Clang + LLD
+          mkdir -p icu-cross-build && cd icu-cross-build
+          "${ICU_BUILD_DIR}/icu/source/configure" \
+            --host=loongarch64-linux-gnu \
+            --prefix=/usr/loongarch64-linux-gnu \
+            --with-cross-build="${ICU_BUILD_DIR}/icu-host-build" \
+            --enable-static \
+            --disable-shared \
+            --disable-samples \
+            --disable-tests \
+            --disable-extras \
+            --disable-icuio \
+            --disable-layoutex \
+            --with-data-packaging=static \
+            CC="clang-${LLVM}" \
+            CXX="clang++-${LLVM}" \
+            AR="llvm-ar-${LLVM}" \
+            RANLIB="llvm-ranlib-${LLVM}" \
+            CFLAGS="--target=loongarch64-linux-gnu --sysroot=/usr/loongarch64-linux-gnu --gcc-toolchain=/usr" \
+            CXXFLAGS="--target=loongarch64-linux-gnu --sysroot=/usr/loongarch64-linux-gnu --gcc-toolchain=/usr" \
+            LDFLAGS="--target=loongarch64-linux-gnu --sysroot=/usr/loongarch64-linux-gnu --gcc-toolchain=/usr -fuse-ld=lld-${LLVM}"
+          make -j$(nproc)
+          sudo make install
+      - name: Cross-compile build
+        if: ${{ matrix.cross_compile == 'loongarch64' }}
+        run: |
+          rm -rf ${{runner.temp}}/bun-webkit ${{runner.temp}}/bun-webkit.tar.gz
+          LLVM=${{ env.LLVM_VERSION }}
+          cmake -G Ninja \
+            -DCMAKE_SYSTEM_NAME=Linux \
+            -DCMAKE_SYSTEM_PROCESSOR=loongarch64 \
+            -DCMAKE_C_COMPILER=clang-${LLVM} \
+            -DCMAKE_CXX_COMPILER=clang++-${LLVM} \
+            -DCMAKE_C_COMPILER_TARGET=loongarch64-linux-gnu \
+            -DCMAKE_CXX_COMPILER_TARGET=loongarch64-linux-gnu \
+            -DCMAKE_SYSROOT=/usr/loongarch64-linux-gnu \
+            -DCMAKE_AR=$(which llvm-ar-${LLVM}) \
+            -DCMAKE_RANLIB=$(which llvm-ranlib-${LLVM}) \
+            -DCMAKE_C_FLAGS="--gcc-toolchain=/usr" \
+            -DCMAKE_CXX_FLAGS="--gcc-toolchain=/usr" \
+            -DCMAKE_EXE_LINKER_FLAGS="-fuse-ld=lld --gcc-toolchain=/usr" \
+            -DCMAKE_FIND_ROOT_PATH=/usr/loongarch64-linux-gnu \
+            -DCMAKE_FIND_ROOT_PATH_MODE_PROGRAM=NEVER \
+            -DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY \
+            -DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=ONLY \
+            -DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=ONLY \
+            -DPORT=JSCOnly \
+            -DCMAKE_BUILD_TYPE=${{matrix.CMAKE_BUILD_TYPE}} \
+            -DENABLE_STATIC_JSC=ON \
+            -DUSE_SYSTEM_MALLOC=ON \
+            -DENABLE_JIT=OFF \
+            -DENABLE_FTL_JIT=OFF \
+            -DENABLE_DFG_JIT=OFF \
+            -DUSE_BUN_JSC_ADDITIONS=ON \
+            -DUSE_BUN_EVENT_LOOP=ON \
+            -B build \
+            -S .
+          cmake --build build --target jsc -- -j$(nproc)
+          mkdir -p ${{runner.temp}}/bun-webkit
+          cp -r build/bin ${{runner.temp}}/bun-webkit/ || true
+          cp -r build/lib ${{runner.temp}}/bun-webkit/ || true
+          mkdir -p ${{runner.temp}}/bun-webkit/include
+          find build -name "*.h" -path "*/DerivedSources/*" -exec cp {} ${{runner.temp}}/bun-webkit/include/ \; || true
+          echo "#define BUN_WEBKIT_VERSION \"${{ inputs.build_ref }}\"" >> ${{runner.temp}}/bun-webkit/include/cmakeconfig.h || true
+          echo '{ "name": "${{matrix.label}}", "version": "0.0.1-${{ inputs.build_ref }}", "os": ["linux"], "cpu": ["${{matrix.package_json_arch}}"], "repository": "https://github.com/${{github.repository}}" }' > ${{runner.temp}}/bun-webkit/package.json
+          cd ${{runner.temp}}
           tar -czf bun-webkit.tar.gz bun-webkit
           rm -rf bun-webkit
       - uses: actions/upload-artifact@v4
@@ -517,6 +644,14 @@ jobs:
         with:
           name: bun-webkit-linux-arm64-musl-lto
           path: ${{runner.temp}}/bun-webkit-linux-arm64-musl-lto
+      - uses: actions/download-artifact@v4
+        with:
+          name: bun-webkit-linux-loongarch64
+          path: ${{runner.temp}}/bun-webkit-linux-loongarch64
+      - uses: actions/download-artifact@v4
+        with:
+          name: bun-webkit-linux-loongarch64-debug
+          path: ${{runner.temp}}/bun-webkit-linux-loongarch64-debug
 
       - name: Rename files
         run: |
@@ -547,6 +682,8 @@ jobs:
           mv ${{runner.temp}}/bun-webkit-windows-amd64-debug/bun-webkit.tar.gz ./out/bun-webkit-windows-amd64-debug.tar.gz
           mv ${{runner.temp}}/bun-webkit-windows-arm64/bun-webkit.tar.gz ./out/bun-webkit-windows-arm64.tar.gz
           mv ${{runner.temp}}/bun-webkit-windows-arm64-debug/bun-webkit.tar.gz ./out/bun-webkit-windows-arm64-debug.tar.gz
+          mv ${{runner.temp}}/bun-webkit-linux-loongarch64/bun-webkit.tar.gz ./out/bun-webkit-linux-loongarch64.tar.gz
+          mv ${{runner.temp}}/bun-webkit-linux-loongarch64-debug/bun-webkit.tar.gz ./out/bun-webkit-linux-loongarch64-debug.tar.gz
 
       - name: Set release info
         id: release_info
@@ -605,3 +742,10 @@ jobs:
             ./out/bun-webkit-windows-amd64-debug.tar.gz
             ./out/bun-webkit-windows-arm64.tar.gz
             ./out/bun-webkit-windows-arm64-debug.tar.gz
+
+      - uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ inputs.release_tag }}
+          files: |
+            ./out/bun-webkit-linux-loongarch64.tar.gz
+            ./out/bun-webkit-linux-loongarch64-debug.tar.gz

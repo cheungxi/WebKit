@@ -24,6 +24,68 @@ _NOTE_: If you make a change to this repo make sure to update the commit hash in
 
 ---
 
+## LoongArch64 Support
+
+### Pre-built Binaries
+
+Pre-built LoongArch64 binaries are published as GitHub Releases for every tagged version and automated build. Download the latest release from the [Releases page](../../releases) and pick the asset named:
+
+```
+webkit-loongarch64-linux-<version>.tar.gz
+```
+
+A SHA256 checksum file (`*.tar.gz.sha256`) is provided alongside each archive for verification:
+
+```bash
+sha256sum -c webkit-loongarch64-linux-<version>.tar.gz.sha256
+```
+
+### Building from Source for LoongArch64
+
+Cross-compilation from an x86-64 Linux host is supported via the bundled CMake toolchain file.
+
+1. Install the cross-compilation toolchain and build dependencies:
+
+   ```bash
+   sudo apt-get install -y \
+     gcc-loongarch64-linux-gnu g++-loongarch64-linux-gnu \
+     cmake ninja-build ruby python3 perl pkg-config gperf libicu-dev
+   ```
+
+2. Configure with CMake:
+
+   ```bash
+   cmake -G Ninja \
+     -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/loongarch64-linux-gnu.cmake \
+     -DPORT=JSCOnly \
+     -DCMAKE_BUILD_TYPE=Release \
+     -DENABLE_STATIC_JSC=ON \
+     -DUSE_SYSTEM_MALLOC=ON \
+     -DENABLE_JIT=OFF \
+     -DENABLE_FTL_JIT=OFF \
+     -DENABLE_DFG_JIT=OFF \
+     -B build -S .
+   ```
+
+3. Build:
+
+   ```bash
+   cmake --build build --target jsc -- -j$(nproc)
+   ```
+
+### System Requirements
+
+- LoongArch64 (loongarch64) processor
+- Linux kernel 5.10 or later
+- glibc 2.36 or later
+
+### Known Limitations
+
+- **No JIT support**: The JSC JIT compiler does not support LoongArch64. All JavaScript runs in the interpreter (LLInt). JIT tiers (Baseline, DFG, FTL) are disabled at build time.
+- LoongArch64 uses 16 KiB memory pages (configured in `Source/WTF/wtf/PageBlock.h`).
+
+---
+
 # WebKit
 
 WebKit is a cross-platform web browser engine. On iOS and macOS, it powers Safari, Mail, Apple Books, and many other applications. For more information about WebKit, see the [WebKit project website](https://webkit.org/).

@@ -106,6 +106,7 @@ bool RunLoop::TimerBase::isActive() const
         }
         return false;
     }
+    RELEASE_ASSERT_NOT_REACHED();
 }
 
 Seconds RunLoop::TimerBase::secondsUntilFire() const
@@ -119,6 +120,7 @@ Seconds RunLoop::TimerBase::secondsUntilFire() const
         }
         return -1.0_s;
     }
+    RELEASE_ASSERT_NOT_REACHED();
 }
 
 void RunLoop::TimerBase::start(Seconds interval, bool repeat)
@@ -202,6 +204,7 @@ void RunLoop::wakeUp()
     case Kind::Bun:
         // Do nothing. This means that JSRunLoopTimer::Manager::PerVMData's RunLoop::Timer leaks instead
         // of being freed.
+        return;
     }
 }
 
@@ -217,6 +220,7 @@ RunLoop::CycleResult RunLoop::cycle(RunLoopMode)
         ASSERT_NOT_REACHED();
         return RunLoop::CycleResult::Stop;
     }
+    RELEASE_ASSERT_NOT_REACHED();
 }
 
 } // namespace WTF
