@@ -25,7 +25,13 @@
 
 #pragma once
 
-#include <cstdint>
+#if ENABLE(DFG_JIT)
+
+#include "DOMJITHeapRange.h"
+#include "OperandsInlines.h"
+#include "VirtualRegister.h"
+#include <wtf/HashMap.h>
+#include <wtf/PrintStream.h>
 
 namespace JSC { namespace DFG {
 
@@ -83,18 +89,6 @@ enum AbstractHeapKind : uint8_t {
     FOR_EACH_ABSTRACT_HEAP_KIND(ABSTRACT_HEAP_DECLARATION)
 #undef ABSTRACT_HEAP_DECLARATION
 };
-
-} } // namespace JSC::DFG
-
-#if ENABLE(DFG_JIT)
-
-#include "DOMJITHeapRange.h"
-#include "OperandsInlines.h"
-#include "VirtualRegister.h"
-#include <wtf/HashMap.h>
-#include <wtf/PrintStream.h>
-
-namespace JSC { namespace DFG {
 
 // Implements a four-level type hierarchy:
 // - World is the supertype of all of the things.
