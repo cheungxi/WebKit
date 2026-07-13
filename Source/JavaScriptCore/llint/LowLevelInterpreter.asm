@@ -225,7 +225,7 @@ end
 
 const maxFrameExtentForSlowPathCall = constexpr maxFrameExtentForSlowPathCall
 
-if X86_64 or ARM64 or ARM64E or RISCV64
+if X86_64 or ARM64 or ARM64E or RISCV64 or LOONGARCH64
     const CalleeSaveSpaceAsVirtualRegisters = 4
 elsif C_LOOP
     const CalleeSaveSpaceAsVirtualRegisters = 1
@@ -423,6 +423,11 @@ if JSVALUE64
         const PB = csr7
         const numberTag = csr8
         const notCellMask = csr9
+    elsif LOONGARCH64
+        const metadataTable = csr5
+        const PB = csr6
+        const numberTag = csr7
+        const notCellMask = csr8
     elsif X86_64
         const metadataTable = csr1
         const PB = csr2
@@ -906,7 +911,7 @@ macro checkStackPointerAlignment(tempReg, location)
     end
 end
 
-if C_LOOP or ARM64 or ARM64E or X86_64 or RISCV64
+if C_LOOP or ARM64 or ARM64E or X86_64 or RISCV64 or LOONGARCH64
     const CalleeSaveRegisterCount = 0
 elsif ARMv7
     const CalleeSaveRegisterCount = 5 + 2 * 2 // 5 32-bit GPRs + 2 64-bit FPRs
@@ -923,7 +928,7 @@ macro pushCalleeSaves()
     # but are not in RegisterSet::vmCalleeSaveRegisters() need to be saved here,
     # i.e.: only those registers that are callee save in the C ABI, but are not
     # callee save in the JIT ABI.
-    if C_LOOP or ARM64 or ARM64E or X86_64 or RISCV64
+    if C_LOOP or ARM64 or ARM64E or X86_64 or RISCV64 or LOONGARCH64
     elsif ARMv7
         emit "vpush.64 {d14, d15}"
         emit "push {r4-r6, r8-r9}"
@@ -931,7 +936,7 @@ macro pushCalleeSaves()
 end
 
 macro popCalleeSaves()
-    if C_LOOP or ARM64 or ARM64E or X86_64 or RISCV64
+    if C_LOOP or ARM64 or ARM64E or X86_64 or RISCV64 or LOONGARCH64
     elsif ARMv7
         emit "pop {r4-r6, r8-r9}"
         emit "vpop.64 {d14, d15}"
@@ -944,7 +949,7 @@ macro preserveCallerPCAndCFR()
         push cfr
     elsif X86_64
         push cfr
-    elsif ARM64 or ARM64E or RISCV64
+    elsif ARM64 or ARM64E or RISCV64 or LOONGARCH64
         push cfr, lr
     else
         error
@@ -959,7 +964,7 @@ macro restoreCallerPCAndCFR()
         pop lr
     elsif X86_64
         pop cfr
-    elsif ARM64 or ARM64E or RISCV64
+    elsif ARM64 or ARM64E or RISCV64 or LOONGARCH64
         pop lr, cfr
     end
 end
@@ -984,6 +989,11 @@ macro preserveCalleeSavesUsedByLLInt()
         storep csr8, -16[cfr]
         storep csr7, -24[cfr]
         storep csr6, -32[cfr]
+    elsif LOONGARCH64
+        storep csr8, -8[cfr]
+        storep csr7, -16[cfr]
+        storep csr6, -24[cfr]
+        storep csr5, -32[cfr]
     end
 end
 
@@ -1006,6 +1016,11 @@ macro restoreCalleeSavesUsedByLLInt()
         loadp -24[cfr], csr7
         loadp -16[cfr], csr8
         loadp -8[cfr], csr9
+    elsif LOONGARCH64
+        loadp -32[cfr], csr5
+        loadp -24[cfr], csr6
+        loadp -16[cfr], csr7
+        loadp -8[cfr], csr8
     end
 end
 
@@ -1027,6 +1042,16 @@ macro forEachGPCalleeSave(func)
         func(csr2, 2)
         func(csr3, 3)
         func(csr4, 4)
+    elsif LOONGARCH64
+        func(csr0, 0)
+        func(csr1, 1)
+        func(csr2, 2)
+        func(csr3, 3)
+        func(csr4, 4)
+        func(csr5, 5)
+        func(csr6, 6)
+        func(csr7, 7)
+        func(csr8, 8)
     else
         error
     end
@@ -1043,6 +1068,15 @@ macro forEachFPCalleeSave(func)
         func(csfr6, 6)
         func(csfr7, 7)
     elsif X86_64
+    elsif LOONGARCH64
+        func(csfr0, 0)
+        func(csfr1, 1)
+        func(csfr2, 2)
+        func(csfr3, 3)
+        func(csfr4, 4)
+        func(csfr5, 5)
+        func(csfr6, 6)
+        func(csfr7, 7)
     else
         error
     end
@@ -1098,11 +1132,29 @@ macro copyCalleeSavesToBuffer(buffer)
         stored csfr9, 160[buffer]
         stored csfr10, 168[buffer]
         stored csfr11, 176[buffer]
+    elsif LOONGARCH64
+        storep csr0, [buffer]
+        storep csr1, 8[buffer]
+        storep csr2, 16[buffer]
+        storep csr3, 24[buffer]
+        storep csr4, 32[buffer]
+        storep csr5, 40[buffer]
+        storep csr6, 48[buffer]
+        storep csr7, 56[buffer]
+        storep csr8, 64[buffer]
+        stored csfr0, 72[buffer]
+        stored csfr1, 80[buffer]
+        stored csfr2, 88[buffer]
+        stored csfr3, 96[buffer]
+        stored csfr4, 104[buffer]
+        stored csfr5, 112[buffer]
+        stored csfr6, 120[buffer]
+        stored csfr7, 128[buffer]
     end
 end
 
 macro copyCalleeSavesToEntryFrameCalleeSavesBuffer(entryFrame)
-    if ARM64 or ARM64E or X86_64 or ARMv7 or RISCV64
+    if ARM64 or ARM64E or X86_64 or ARMv7 or RISCV64 or LOONGARCH64
         vmEntryRecord(entryFrame, entryFrame)
         leap VMEntryRecord::calleeSaveRegistersBuffer[entryFrame], entryFrame
         copyCalleeSavesToBuffer(entryFrame)
@@ -1110,7 +1162,7 @@ macro copyCalleeSavesToEntryFrameCalleeSavesBuffer(entryFrame)
 end
 
 macro copyCalleeSavesToVMEntryFrameCalleeSavesBuffer(vm, temp)
-    if ARM64 or ARM64E or X86_64 or ARMv7 or RISCV64
+    if ARM64 or ARM64E or X86_64 or ARMv7 or RISCV64 or LOONGARCH64
         loadp VM::topEntryFrame[vm], temp
         copyCalleeSavesToEntryFrameCalleeSavesBuffer(temp)
     end
@@ -1166,11 +1218,29 @@ macro restoreCalleeSavesFromBuffer(buffer)
         loadd 160[buffer], csfr9
         loadd 168[buffer], csfr10
         loadd 176[buffer], csfr11
+    elsif LOONGARCH64
+        loadq [buffer], csr0
+        loadq 8[buffer], csr1
+        loadq 16[buffer], csr2
+        loadq 24[buffer], csr3
+        loadq 32[buffer], csr4
+        loadq 40[buffer], csr5
+        loadq 48[buffer], csr6
+        loadq 56[buffer], csr7
+        loadq 64[buffer], csr8
+        loadd 72[buffer], csfr0
+        loadd 80[buffer], csfr1
+        loadd 88[buffer], csfr2
+        loadd 96[buffer], csfr3
+        loadd 104[buffer], csfr4
+        loadd 112[buffer], csfr5
+        loadd 120[buffer], csfr6
+        loadd 128[buffer], csfr7
     end
 end
 
 macro restoreCalleeSavesFromVMEntryFrameCalleeSavesBuffer(vm, temp)
-    if ARM64 or ARM64E or X86_64 or ARMv7 or RISCV64
+    if ARM64 or ARM64E or X86_64 or ARMv7 or RISCV64 or LOONGARCH64
         loadp VM::topEntryFrame[vm], temp
         vmEntryRecord(temp, temp)
         leap VMEntryRecord::calleeSaveRegistersBuffer[temp], temp
@@ -1179,7 +1249,7 @@ macro restoreCalleeSavesFromVMEntryFrameCalleeSavesBuffer(vm, temp)
 end
 
 macro preserveReturnAddressAfterCall(destinationRegister)
-    if C_LOOP or ARMv7 or ARM64 or ARM64E or RISCV64
+    if C_LOOP or ARMv7 or ARM64 or ARM64E or RISCV64 or LOONGARCH64
         # In C_LOOP case, we're only preserving the bytecode vPC.
         move lr, destinationRegister
     elsif X86_64
@@ -1193,7 +1263,7 @@ macro functionPrologue()
     tagReturnAddress sp
     if X86_64
         push cfr
-    elsif ARM64 or ARM64E or RISCV64
+    elsif ARM64 or ARM64E or RISCV64 or LOONGARCH64
         push cfr, lr
     elsif C_LOOP or ARMv7 
         push lr
@@ -1205,7 +1275,7 @@ end
 macro functionEpilogue()
     if X86_64
         pop cfr
-    elsif ARM64 or ARM64E or RISCV64
+    elsif ARM64 or ARM64E or RISCV64 or LOONGARCH64
         pop lr, cfr
     elsif C_LOOP or ARMv7
         pop cfr
@@ -1368,7 +1438,7 @@ macro prepareForTailCall(temp1, temp2, temp3, temp4, storeCodeBlock)
     addi StackAlignment - 1 + CallFrameHeaderSize, temp2
     andi ~StackAlignmentMask, temp2
 
-    if ARMv7 or ARM64 or ARM64E or C_LOOP or RISCV64
+    if ARMv7 or ARM64 or ARM64E or C_LOOP or RISCV64 or LOONGARCH64
         subi CallerFrameAndPCSize, temp2
         loadp CallerFrameAndPC::returnPC[cfr], lr
     else
@@ -1662,7 +1732,7 @@ macro prologue(osrSlowPath, traceSlowPath)
         btpz r0, .recover
         move cfr, sp # restore the previous sp
         # pop the callerFrame since we will jump to a function that wants to save it
-        if ARM64 or RISCV64
+        if ARM64 or RISCV64 or LOONGARCH64
             pop lr, cfr
         elsif ARM64E
             # untagReturnAddress will be performed in Gate::entryOSREntry.
@@ -2283,7 +2353,7 @@ else
             addp t4, t3, t4
             move index, t5
             storep t4, [map, t5, 4]
-        else # X86_64, ARM64, RISCV64
+        else # X86_64, ARM64, RISCV64, LOONGARCH64
             pcrtoaddr label, t3
             move index, t4
             storep t3, [map, t4, PtrSize]

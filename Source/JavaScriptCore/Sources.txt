@@ -55,6 +55,7 @@ assembler/MacroAssemblerARM64.cpp @no-unify-when(bundle<=8)
 assembler/MacroAssemblerARMv7.cpp @no-unify-when(bundle<=8)
 assembler/MacroAssemblerCodeRef.cpp
 assembler/MacroAssemblerPrinter.cpp
+assembler/MacroAssemblerLOONGARCH64.cpp @no-unify-when(bundle<=8)
 assembler/MacroAssemblerRISCV64.cpp @no-unify-when(bundle<=8)
 assembler/MacroAssemblerX86_64.cpp @no-unify-when(bundle<=8)
 assembler/PerfLog.cpp
